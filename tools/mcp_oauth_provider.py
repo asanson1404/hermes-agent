@@ -93,6 +93,23 @@ class HermesProviderMixin:
         # oauth.user_agent — stamped onto token-endpoint requests only; some authorization servers/WAFs
         # reject httpx's default (#75576).
         self._hermes_token_user_agent = token_user_agent
+        # oauth.scope, captured before the SDK's 401 branch overwrites client_metadata.scope (see
+        # _pin_configured_scope).
+        metadata = getattr(getattr(self, "context", None), "client_metadata", None)
+        self._hermes_configured_scope = getattr(metadata, "scope", None) or None
+
+    def _pin_configured_scope(self) -> None:
+        """Request exactly the configured ``oauth.scope``. On a 401 the SDK replaces
+        ``client_metadata.scope`` by the MCP spec's selection (the ``WWW-Authenticate`` scope, else the
+        PRM ``scopes_supported``): Google's MCP servers advertise every Gmail scope there, so a server
+        configured with ``gmail.readonly`` was granted ``https://mail.google.com/`` and ``gmail.send``.
+        The operator's scope is an explicit restriction; without one the SDK's selection stands."""
+        configured = getattr(self, "_hermes_configured_scope", None)
+        if configured and self.context.client_metadata.scope != configured:
+            self._hermes_logger.info(
+                "MCP OAuth: requesting the configured scope %r instead of %r selected from server metadata",
+                configured, self.context.client_metadata.scope)
+            self.context.client_metadata.scope = configured
 
     async def _perform_authorization(self):
         info = self.context.client_info
@@ -105,6 +122,7 @@ class HermesProviderMixin:
                 "background reconnects cannot start a device login")
         self._tolerate_missing_iss_for_known_server()
         self._request_google_offline_access()
+        self._pin_configured_scope()
         return await super()._perform_authorization()
 
     def _tolerate_missing_iss_for_known_server(self) -> None:
