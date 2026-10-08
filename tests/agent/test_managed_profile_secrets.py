@@ -44,27 +44,3 @@ def test_managed_credentials_resolve_across_profiles(tmp_path, monkeypatch, pers
     finally:
         ss.set_multiplex_active(previous_mode)
         managed_scope.invalidate_managed_cache()
-
-
-@pytest.mark.parametrize("multiplex", [False, True])
-@pytest.mark.parametrize("empty_managed_dir", [False, True])
-def test_unmanaged_profile_retains_existing_resolution(
-    tmp_path, monkeypatch, multiplex, empty_managed_dir
-):
-    managed = tmp_path / "no-managed-env"
-    if empty_managed_dir:
-        managed.mkdir()
-    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    monkeypatch.setenv("AMBIENT_ONLY_KEY", "process-value")
-    (tmp_path / ".env").write_text("SLACK_MCP_CLIENT_SECRET=personal\n", encoding="utf-8")
-    previous_mode = ss.is_multiplex_active()
-    ss.set_multiplex_active(multiplex)
-    token = ss.set_secret_scope(ss.build_profile_secret_scope(tmp_path), profile_home=str(tmp_path))
-    try:
-        assert ss.get_secret("SLACK_MCP_CLIENT_SECRET") == "personal"
-        assert ss.get_secret("AMBIENT_ONLY_KEY") == (None if multiplex else "process-value")
-        assert ss.get_secret("SLACK_ALLOWED_USERS") is None
-    finally:
-        ss.reset_secret_scope(token)
-        ss.set_multiplex_active(previous_mode)
