@@ -145,6 +145,8 @@ def validate_env_var_name_for_write(key: str) -> None:
     if not _ENV_VAR_NAME_RE.match(key):
         raise ValueError(f"Invalid environment variable name: {key!r}")
     policy_name = _env_var_policy_name(key)
+    if policy_name in LAUNCH_ONLY_ENV_KEYS:
+        raise ValueError(f"Environment variable {key!r} is launch-only and cannot be persisted.")
     if policy_name in _ENV_VAR_NAME_DENYLIST or policy_name.startswith(_ENV_VAR_NAME_DENY_PREFIXES):
         raise ValueError(
             f"Environment variable {key!r} is on the writer denylist. "
@@ -2705,6 +2707,8 @@ def _publish_env_value(key: str, value: Optional[str]) -> None:
     profile-home override), but the in-process mirror historically went straight to ``os.environ``. See
     #77490, #88441.
     """
+    if _env_var_policy_name(key) in LAUNCH_ONLY_ENV_KEYS:
+        return
     try:
         from agent.secret_scope import current_secret_scope, serves_routed_profile
 
@@ -2728,6 +2732,8 @@ def env_write_refusal(key: str, action: str) -> Optional[str]:
     """The ``.env`` write-lock refusal for ``key``, or None when the write is allowed.
     Two distinct locks: ``is_managed()`` (package-manager install) and the managed *scope*
     (administrator-pinned env key — the managed .env wins at load anyway)."""
+    if _env_var_policy_name(key) in LAUNCH_ONLY_ENV_KEYS:
+        return f"Cannot {action} {key}: it is launch-only; set it in the administrator's launch environment."
     if is_managed():
         return format_managed_message(f"{action} {key}")
     if managed_scope.is_env_managed(key):
@@ -2855,20 +2861,10 @@ def save_env_value_secure(key: str, value: str) -> Dict[str, Any]:
 
 
 def reload_env() -> int:
-    """Re-read ~/.hermes/.env into os.environ; returns count of vars changed.
-    Removes deleted vars only when known to Hermes (OPTIONAL_ENV_VARS and _EXTRA_ENV_KEYS) so
-    unrelated environment is never clobbered."""
-    env_vars = load_env()
-    count = 0
-    for key, value in env_vars.items():
-        if key not in LAUNCH_ONLY_ENV_KEYS and os.environ.get(key) != value:
-            os.environ[key] = value
-            count += 1
-    for key in (set(OPTIONAL_ENV_VARS) | _EXTRA_ENV_KEYS) - set(env_vars):
-        if key in os.environ:
-            del os.environ[key]
-            count += 1
-    return count
+    """Reload effective env into the owning scope/process; return changed-name count."""
+    from hermes_cli.config_env_reload import reload_env as _reload_env
+
+    return _reload_env()
 
 
 def _scoped_environ_get(key: str) -> Optional[str]:

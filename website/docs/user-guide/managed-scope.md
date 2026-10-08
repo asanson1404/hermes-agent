@@ -51,6 +51,10 @@ files. It is **never persisted** to any `.env` by Hermes, and it is honored only
 from the launch environment: a `HERMES_MANAGED_DIR` line in a `.env` file or a
 value supplied by an external secret source is ignored.
 
+Generic env save/delete operations also refuse launch-only names, and their
+live-value publisher cannot replace or remove an administrator's launch value.
+Change this directory in the service/container launch environment, then restart.
+
 ```bash
 # Point managed scope at a custom directory (set by IT / the deployment, not the user)
 export HERMES_MANAGED_DIR=/opt/org/hermes-policy
@@ -92,6 +96,12 @@ too — otherwise it would not be "managed." This is the one place that inverts 
 usual "an environment variable overrides config.yaml" rule, and it applies only
 to the specific keys the managed layer specifies.
 :::
+
+Hot env reload applies the same managed-last precedence. It retains the active
+profile's already-resolved external secret snapshot without contacting providers,
+then overlays managed values. Routed reloads update only the installed profile
+scope, never the shared process environment. Personal `.env` files are not
+rewritten by reload; unpinned personal keys remain writable.
 
 ## Seeing what's managed
 
