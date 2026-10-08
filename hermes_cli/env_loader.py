@@ -159,9 +159,16 @@ def managed_dotenv_keys() -> frozenset[str]:
     return frozenset(_MANAGED_DOTENV_KEYS)
 
 
-def get_secret_source_values(hermes_home: str | os.PathLike) -> dict[str, str]:
-    """Return the external-secret value snapshot for ``hermes_home``."""
-    return dict(_SECRET_SOURCE_VALUES_BY_HOME.get(str(Path(hermes_home).resolve()), {}))
+def get_secret_source_values(
+    hermes_home: str | os.PathLike, *, authoritative_only: bool = False,
+) -> dict[str, str]:
+    """Return cached source values, optionally only those allowed to override dotenv.
+
+    The full snapshot also includes gap-fills and skipped existing values; those
+    must not override fresh personal values on reload.
+    """
+    snapshots = _SECRET_SOURCE_RESTORE_BY_HOME if authoritative_only else _SECRET_SOURCE_VALUES_BY_HOME
+    return dict(snapshots.get(str(Path(hermes_home).resolve()), {}))
 
 
 def hydrate_profile_secret_sources(hermes_home: str | os.PathLike) -> dict[str, str]:
@@ -230,6 +237,8 @@ def _hydrate_profile_secret_sources(home: Path) -> dict[str, str]:
         _SECRET_SOURCES[name] = applied.source
         values[name] = value
     _SECRET_SOURCE_VALUES_BY_HOME[home_key] = values
+    _SECRET_SOURCE_RESTORE_BY_HOME[home_key] = {
+        n: values[n] for n, a in report.provenance.items() if a.authoritative and n in values}
     return dict(values)
 
 
