@@ -48,3 +48,50 @@ def test_custom_key_is_password_masked(monkeypatch):
     assert "s3cret-value" not in str(row)
 
 
+def test_custom_key_save_composes_with_separate_managed_file(tmp_path, monkeypatch):
+    """The dashboard writes personal keys, while routed reads retain admin gates."""
+    from agent import secret_scope as ss
+    from hermes_cli import managed_scope
+
+    home = tmp_path / "personal"
+    home.mkdir()
+    (home / ".env").write_text("EXISTING_PERSONAL_KEY=keep-me\n", encoding="utf-8")
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    admin_text = "SLACK_ALLOWED_USERS=ADMIN\n"
+    (managed / ".env").write_text(admin_text, encoding="utf-8")
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
+    _cfg_mod.invalidate_env_cache()
+    managed_scope.invalidate_managed_cache()
+    try:
+        response = client.put(
+            "/api/env",
+            json={"key": "SLACK_MCP_CLIENT_SECRET", "value": "personal-test-value"},
+            headers=HEADERS,
+        )
+        assert response.status_code == 200, response.text
+        assert ss.load_env_file(home / ".env") == {
+            "EXISTING_PERSONAL_KEY": "keep-me",
+            "SLACK_MCP_CLIENT_SECRET": "personal-test-value",
+        }
+        assert (managed / ".env").read_text(encoding="utf-8") == admin_text
+        response = client.get("/api/env", headers=HEADERS)
+        assert response.status_code == 200
+        row = response.json()["SLACK_MCP_CLIENT_SECRET"]
+        assert row["custom"] and row["is_set"] and row["is_password"]
+        assert "personal-test-value" not in str(row)
+        previous_mode = ss.is_multiplex_active()
+        ss.set_multiplex_active(True)
+        token = ss.set_secret_scope(ss.build_profile_secret_scope(home), profile_home=str(home))
+        try:
+            assert ss.get_secret("SLACK_MCP_CLIENT_SECRET") == "personal-test-value"
+            assert ss.get_secret("SLACK_ALLOWED_USERS") == "ADMIN"
+        finally:
+            ss.reset_secret_scope(token)
+            ss.set_multiplex_active(previous_mode)
+    finally:
+        _cfg_mod.invalidate_env_cache()
+        managed_scope.invalidate_managed_cache()
+
+
