@@ -97,11 +97,15 @@ usual "an environment variable overrides config.yaml" rule, and it applies only
 to the specific keys the managed layer specifies.
 :::
 
-Hot env reload applies the same managed-last precedence. It retains the active
-profile's already-resolved external secret snapshot without contacting providers,
-then overlays managed values. Routed reloads update only the installed profile
-scope, never the shared process environment. Personal `.env` files are not
-rewritten by reload; unpinned personal keys remain writable.
+Hot env reload applies the same managed-last precedence without contacting
+external providers. Fresh personal values beat non-authoritative source snapshots
+(including values previously skipped because a personal value existed). Cached
+source-only credentials are retained; sources permitted to override a key by
+`override_existing` and `preserve_existing` retain their resolved value over the
+personal file, including resolved references. Managed values are applied last.
+Routed reloads update only the installed profile scope, never the shared process
+environment. Personal `.env` files are not rewritten by reload; unpinned personal
+keys remain writable.
 
 ## Seeing what's managed
 

@@ -72,7 +72,40 @@ def test_launch_only_key_cannot_be_mutated(env_context, tmp_path, monkeypatch, o
     assert scope is None or key not in scope
 
 
-def test_reload_keeps_managed_last_and_profile_local(env_context, monkeypatch):
+@pytest.fixture
+def dummy_source(env_context, monkeypatch):
+    from agent.secret_sources import registry
+    from agent.secret_sources.base import FetchResult, SecretSource
+    from hermes_cli import env_loader
+
+    class DummySource(SecretSource):
+        name = "reload_dummy"
+        label = "Reload dummy"
+
+        def __init__(self):
+            self.fetches = 0
+
+        def fetch(self, cfg, home_path):
+            self.fetches += 1
+            return FetchResult(secrets={
+                "OPENAI_API_KEY": "dummy-resolved", "GITHUB_TOKEN": "dummy-source-only",
+                "SLACK_ALLOWED_USERS": "external-owner",
+            })
+
+    home, _, _, _ = env_context
+    monkeypatch.setattr(registry, "_SOURCES", dict(registry._SOURCES))
+    monkeypatch.setattr(registry, "_SOURCE_ORIGINS", dict(registry._SOURCE_ORIGINS))
+    source = DummySource()
+    assert registry.register_source(source)
+    for key in ("OPENAI_API_KEY", "GITHUB_TOKEN", "SLACK_ALLOWED_USERS"):
+        monkeypatch.delenv(key, raising=False)
+    try:
+        yield source
+    finally:
+        env_loader.reset_secret_source_cache(home)
+
+
+def test_reload_keeps_managed_last_and_profile_local(env_context, dummy_source, monkeypatch):
     from agent.secret_scope import build_profile_secret_scope
     from hermes_cli import config, env_loader
 
@@ -84,11 +117,13 @@ def test_reload_keeps_managed_last_and_profile_local(env_context, monkeypatch):
         "SLACK_ALLOWED_USERS=personal-owner\nDUMMY_PERSONAL_TOKEN=personal-only\n"
         "OPENAI_API_KEY=op://dummy/reference\nHERMES_MANAGED_DIR=ignored\n", encoding="utf-8"
     )
-    # External sources have already hydrated; reload must retain their resolved values,
-    # without performing a provider/network refresh or allowing them to beat admin policy.
-    monkeypatch.setattr(env_loader, "get_secret_source_values", lambda path: {
-        "OPENAI_API_KEY": "dummy-resolved", "SLACK_ALLOWED_USERS": "external-owner",
-    })
+    (home / "config.yaml").write_text(
+        "secrets:\n  reload_dummy:\n    enabled: true\n    override_existing: true\n", encoding="utf-8"
+    )
+    if routed:
+        env_loader.hydrate_profile_secret_sources(home)
+    else:
+        env_loader.load_hermes_dotenv()
     for key in ("SLACK_ALLOWED_USERS", "GITHUB_TOKEN", "OPENAI_API_KEY", "DUMMY_PERSONAL_TOKEN", "ANTHROPIC_API_KEY"):
         monkeypatch.setenv(key, "launch-original")
     if scope is not None:
@@ -112,6 +147,48 @@ def test_reload_keeps_managed_last_and_profile_local(env_context, monkeypatch):
         assert os.environ["SLACK_ALLOWED_USERS"] == "admin-owner"
         assert os.environ["OPENAI_API_KEY"] == "dummy-resolved"
     assert config.reload_env() == 0
+
+
+@pytest.mark.parametrize("initial,override,preserve", [
+    ("dummy-personal-original", False, False),
+    (None, False, False),
+    (None, True, True),
+    ("op://dummy/reference", True, False),
+])
+def test_reload_source_authority_after_personal_rotation(
+    env_context, dummy_source, initial, override, preserve,
+):
+    from hermes_cli import config, env_loader
+
+    home, _, scope, routed = env_context
+    (home / "config.yaml").write_text(
+        f"secrets:\n  preserve_existing: {'[OPENAI_API_KEY]' if preserve else '[]'}\n"
+        f"  reload_dummy:\n    enabled: true\n    override_existing: {str(override).lower()}\n",
+        encoding="utf-8",
+    )
+    (home / ".env").write_text(
+        f"OPENAI_API_KEY={initial}\n" if initial else "", encoding="utf-8",
+    )
+    if routed:
+        env_loader.hydrate_profile_secret_sources(home)
+    else:
+        env_loader.load_hermes_dotenv()
+    assert dummy_source.fetches == 1
+    original_process = dict(os.environ)
+    config.save_env_value("OPENAI_API_KEY", "dummy-personal-rotated")
+    config.save_env_value("ANTHROPIC_API_KEY", "dummy-delete-me")
+    assert config.remove_env_value("ANTHROPIC_API_KEY") is True
+    config.reload_env()
+    target = scope if scope is not None else os.environ
+    expected = "dummy-resolved" if override and not preserve else "dummy-personal-rotated"
+    assert target["OPENAI_API_KEY"] == expected
+    assert config.load_env()["OPENAI_API_KEY"] == "dummy-personal-rotated"
+    assert target["GITHUB_TOKEN"] == "dummy-source-only"
+    assert "ANTHROPIC_API_KEY" not in target
+    assert config.reload_env() == 0
+    assert dummy_source.fetches == 1
+    if routed:
+        assert dict(os.environ) == original_process
 
 
 def test_personal_key_save_delete_reload_stays_local(env_context, monkeypatch):
