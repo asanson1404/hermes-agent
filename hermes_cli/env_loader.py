@@ -344,6 +344,7 @@ def _load_dotenv_with_fallback(
     # exposing only ``load_dotenv``, and ``gateway.run`` imports this module at import time.
     from dotenv.main import DotEnv
     from dotenv.variables import parse_variables
+    from hermes_constants import LAUNCH_ONLY_ENV_KEYS
 
     assignments = list(DotEnv(dotenv_path=None, stream=io.StringIO(text), interpolate=False).parse())
 
@@ -364,7 +365,7 @@ def _load_dotenv_with_fallback(
                 value = "".join(atom.resolve(lookup) for atom in parse_variables(value))
             resolved[name] = value
         for name, value in resolved.items():
-            if value is None or (not override and name in os.environ):
+            if value is None or name in LAUNCH_ONLY_ENV_KEYS or (not override and name in os.environ):
                 continue
             current = os.environ.get(name)
             record = _DOTENV_PUBLISHED.get(name)

@@ -163,6 +163,15 @@ class TestApplyAll:
         assert report.provenance["API_KEY"].shape == "mapped"
         assert report.provenance["API_KEY"].overrode_env is False
 
+    def test_source_never_sets_a_launch_only_key(self, tmp_path):
+        """A source in the user's config.yaml must not repoint the administrator-managed scope."""
+        reg.register_source(_make_source(
+            secrets={"HERMES_MANAGED_DIR": str(tmp_path), "API_KEY": "v1"}, override=True))
+        env: dict = {}
+        report = reg.apply_all({"dummy": {"enabled": True}}, tmp_path, environ=env)
+        assert env == {"API_KEY": "v1"}
+        assert "HERMES_MANAGED_DIR" in report.sources[0].skipped_protected
+
 
 
 
