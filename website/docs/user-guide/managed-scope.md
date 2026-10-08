@@ -47,7 +47,9 @@ the feature.
 The location can be relocated with the `HERMES_MANAGED_DIR` environment variable
 (for containers or non-`/etc` deployments). This is a deployment/bootstrap path
 knob — like `HERMES_HOME` — set by the same administrator who owns the managed
-files. It is **never persisted** to any `.env` by Hermes.
+files. It is **never persisted** to any `.env` by Hermes, and it is honored only
+from the launch environment: a `HERMES_MANAGED_DIR` line in a `.env` file or a
+value supplied by an external secret source is ignored.
 
 ```bash
 # Point managed scope at a custom directory (set by IT / the deployment, not the user)
@@ -55,8 +57,9 @@ export HERMES_MANAGED_DIR=/opt/org/hermes-policy
 ```
 
 :::warning
-A user who can set `HERMES_MANAGED_DIR` can repoint managed scope at a directory
-they control, defeating it. In a real deployment this variable should be fixed
+A user who controls the environment Hermes is launched with can set
+`HERMES_MANAGED_DIR` and repoint managed scope at a directory they control,
+defeating it. In a real deployment this variable should be fixed
 by the administrator (e.g. baked into the service unit / container image), not
 left user-settable. `hermes doctor` reports the *resolved* managed directory so
 a redirect is visible.

@@ -208,6 +208,11 @@ def get_routing_process_hermes_home() -> Path:
 # default profile) so the two lists cannot drift apart.
 LOCAL_RUNTIME_ROOT_DIRS: frozenset[str] = frozenset({"models", "runtimes", "node"})
 
+# Deployment bootstrap keys honored only from the launch environment. A user-writable layer (a dotenv
+# file, an external secret source configured in the user's config.yaml) that set one could repoint the
+# administrator-managed scope at a directory the user controls and void every managed value.
+LAUNCH_ONLY_ENV_KEYS: frozenset[str] = frozenset({"HERMES_MANAGED_DIR"})
+
 # get_default_hermes_root() memo keyed on (native home, expanded HERMES_HOME) so it stays
 # fresh when a test or plugin mutates either input; saves ~80us/call at 31+ sites.
 _default_hermes_root_memo: "tuple[str, str, Path] | None" = None

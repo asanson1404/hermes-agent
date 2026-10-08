@@ -45,7 +45,7 @@ from hermes_constants import (  # noqa: F401
     _chown_to_hermes_uid, _container_or_chmod_skipped, _resolve_hermes_uid_gid,
     apply_secure_dir_policy, get_managed_system)
 # Re-export from hermes_constants — canonical definition lives there.
-from hermes_constants import get_hermes_home, get_process_hermes_home  # noqa: F401
+from hermes_constants import LAUNCH_ONLY_ENV_KEYS, get_hermes_home, get_process_hermes_home  # noqa: F401
 from utils import atomic_replace, fast_safe_load, file_signature, mkstemp_beside
 from hermes_cli.config_read_errors import (
     _CONFIG_PARSE_FAILURES, _FIX_PERMS, _FIX_YAML, FailedConfigRead, _backups_dir_display,
@@ -2861,7 +2861,7 @@ def reload_env() -> int:
     env_vars = load_env()
     count = 0
     for key, value in env_vars.items():
-        if os.environ.get(key) != value:
+        if key not in LAUNCH_ONLY_ENV_KEYS and os.environ.get(key) != value:
             os.environ[key] = value
             count += 1
     for key in (set(OPTIONAL_ENV_VARS) | _EXTRA_ENV_KEYS) - set(env_vars):

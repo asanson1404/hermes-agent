@@ -24,7 +24,7 @@ from agent.secret_sources.base import (
     SECRET_SOURCE_API_VERSION, ErrorKind, FetchResult, SecretSource, is_valid_env_name,
     reset_source_environment, set_source_environment,
 )
-from hermes_constants import hermes_home_key, normalize_scope
+from hermes_constants import LAUNCH_ONLY_ENV_KEYS, hermes_home_key, normalize_scope
 
 logger = logging.getLogger(__name__)
 
@@ -357,7 +357,7 @@ class _Applier:
         if not is_valid_env_name(var):
             sr.skipped_invalid.append(var)
             return False
-        if var in self.protected:
+        if var in self.protected or var in LAUNCH_ONLY_ENV_KEYS:
             sr.skipped_protected.append(var)
             return False
         if var in self.claimed:
