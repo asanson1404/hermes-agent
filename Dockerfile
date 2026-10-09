@@ -272,11 +272,10 @@ FROM runtime_base AS python_deps
 #
 # Source binding is created after the source copy below.
 COPY pyproject.toml uv.lock ./
+COPY docker/build_dependencies.py docker/build_dependencies.py
 RUN touch ./README.md
-RUN python3 -m pm.build_env --source /opt/hermes --python /usr/local/bin/python3 \
-    --out /opt/hermes/.venv --no-install-project --sealed \
-    --extra all --extra messaging --extra otlp --extra anthropic --extra bedrock \
-    --extra azure-identity --extra matrix --extra google-chat
+# One build-time selection owns both installed extras and PM's shipped baseline.
+RUN python3 -m docker.build_dependencies
 
 # Icons render on the runtime environment: Pillow and resvg-py are core
 # dependencies. A stage of its own so the frontend stage keeps building its
