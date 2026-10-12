@@ -19,11 +19,15 @@ def build_image_dependencies(root: Path, python: Path) -> Path:
         extras=list(IMAGE_EXTRAS), no_install_project=True, sealed=True,
         explicit=True,
     )
-    from pm.features import write_features
+    from pm.features import installed_extras, write_features
 
     # A writable generation replaces the sealed venv, rather than layering on
-    # it. Publish only after a successful build, using the same explicit extras.
-    write_features(list(IMAGE_EXTRAS), root)
+    # it. Publish only after a successful build. With lazy installs off this
+    # list is the frozen set, so it also carries the members the aggregates
+    # installed (`--extra mcp` must pass); the inventory alone would drop the
+    # aggregates themselves, whose anchors are not modules.
+    installed = installed_extras(root, root / ".venv", python_exe=python)
+    write_features(sorted({*IMAGE_EXTRAS, *installed}), root)
     return executable
 
 

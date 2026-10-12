@@ -242,7 +242,7 @@ FROM runtime_base AS python_deps
 # frontend stats the readme path during dep resolution, so we `touch` an
 # empty placeholder — the real README is restored by `COPY . .` below.
 #
-# `pm.build_env --no-install-project --extra all --extra messaging --extra otlp`
+# `docker/build_dependencies.py` (IMAGE_EXTRAS: all, messaging, otlp, ...)
 # installs the deps reachable through the composite `[all]` extra
 # (handpicked set intended for the production image; dependency groups are not selected),
 # plus gateway messaging adapters that should work in the published image

@@ -29,21 +29,15 @@ The image's Python environment follows `pyproject.toml` and `uv.lock` (currently
 Python 3.14). Its curated extras are not the native desktop bundle's
 `--all-extras` set. It does not include an Electron desktop app.
 
-`docker/build_dependencies.py` owns the image's explicit extra selection. The
-build uses that same selection to install dependencies and, only after success,
-write `/opt/hermes/enabled-features.json` through PM. On a new data volume, the
-first plugin dependency transaction uses this shipped baseline when creating a
-writable generation under `/opt/data/installs`. That generation replaces the
-image environment at bootstrap; it must retain the image's optional dependencies,
-including MCP and Slack (selected through `all` and `messaging`, respectively).
-
-Once the volume has a recorded selection, PM preserves that selection and plugin
-members instead of forcing the image defaults back on every boot. This is build-time
-metadata, not a startup install or a migration of existing volumes. A volume already
-repaired with `hermes pm install --extra mcp --extra slack` keeps those extras.
-`hermes pm repair` replays the recorded selection; it does not add omitted extras.
-Dependency preservation does not guarantee service connectivity: OAuth, network
-access and Slack scopes still need to be valid.
+`docker/build_dependencies.py` owns the image's extra selection. After a
+successful build it records every extra the image actually installed (including
+members of `all` and `messaging`, such as MCP and Slack) in
+`/opt/hermes/enabled-features.json`. On a new data volume, the first plugin
+dependency transaction keeps that set when it creates the writable generation
+under `/opt/data/installs`; once the volume has a recorded selection, PM keeps it.
+With `security.allow_lazy_installs: false` the same list is the frozen feature
+set. This is build-time metadata, not a startup install or a migration of
+existing volumes.
 
 ## Quick start
 

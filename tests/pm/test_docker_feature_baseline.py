@@ -10,6 +10,7 @@ import pytest
 def test_image_build_retains_features_for_plugin_sync(tmp_path, monkeypatch):
     from docker import build_dependencies
     import pm
+    import pm.features as features
     import pm.install as install
     from pm import paths
     from pm.environments import runtime_facts_path
@@ -25,16 +26,28 @@ def test_image_build_retains_features_for_plugin_sync(tmp_path, monkeypatch):
         built.extend(kwargs["extras"])
         return root / ".venv/bin/python"
 
+    def inventory(repo_dir, venv_dir, *, python_exe):
+        # The inventory finds the aggregates' members (`all` brings mcp,
+        # `messaging` slack), never `all` itself: its anchor is not a module.
+        assert (repo_dir, venv_dir, python_exe) == (root, root / ".venv", Path("/usr/local/bin/python3"))
+        return ["anthropic", "mcp", "slack"]
+
     monkeypatch.setattr(pm, "build_environment", build)
+    monkeypatch.setattr(features, "installed_extras", inventory)
     build_dependencies.build_image_dependencies(root, Path("/usr/local/bin/python3"))
     monkeypatch.setattr(paths, "store_root", lambda: root / "tools")
     monkeypatch.setattr(paths, "repo_root", lambda: root)
-    assert read_features() == sorted(built)
+    shipped = sorted({*built, "mcp", "slack"})
+    assert read_features() == shipped
     assert {"all", "messaging", "matrix", "google-chat"} <= set(built)
     (root / "pyproject.toml").write_text(
         "[project]\nname='fixture'\nversion='1'\n[project.optional-dependencies]\n"
-        + "\n".join(f"{name}=[]" for name in [*built, "mcp", "slack"])
+        + "\n".join(f"{name}=[]" for name in shipped)
     )
+    # Lazy installs off freezes the shipped list: an explicit extra the image
+    # already installed through an aggregate must stay selectable.
+    monkeypatch.setattr(install, "lazy_installs_allowed", lambda: False)
+    assert install._feature_policy(["mcp", "slack"], repair=False) == (shipped, shipped)
     monkeypatch.setattr(install, "lazy_installs_allowed", lambda: True)
     package = install.get_package("venv")
     monkeypatch.setattr(package, "expected_stamp", lambda extras, **kw: json.dumps(extras))
@@ -48,9 +61,9 @@ def test_image_build_retains_features_for_plugin_sync(tmp_path, monkeypatch):
     plugin = root / "plugin"
     plugin.mkdir()
     install.sync_venv(explicit=True, plugins=Members([plugin]))
-    assert selections[-1][0] == sorted(built)
+    assert selections[-1][0] == shipped
     assert selections[-1][1]["plugin_dirs"] == [plugin]
-    assert Facts(runtime_facts_path(root)).get("venv")["extras"] == sorted(built)
+    assert Facts(runtime_facts_path(root)).get("venv")["extras"] == shipped
 
     # An already repaired volume owns its selection; image defaults are not
     # forced back on it when a subsequent plugin transaction runs.
