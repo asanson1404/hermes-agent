@@ -242,7 +242,7 @@ FROM runtime_base AS python_deps
 # frontend stats the readme path during dep resolution, so we `touch` an
 # empty placeholder — the real README is restored by `COPY . .` below.
 #
-# `pm.build_env --no-install-project --extra all --extra messaging --extra otlp`
+# `docker/build_dependencies.py` (IMAGE_EXTRAS: all, messaging, otlp, ...)
 # installs the deps reachable through the composite `[all]` extra
 # (handpicked set intended for the production image; dependency groups are not selected),
 # plus gateway messaging adapters that should work in the published image
@@ -272,11 +272,10 @@ FROM runtime_base AS python_deps
 #
 # Source binding is created after the source copy below.
 COPY pyproject.toml uv.lock ./
+COPY docker/build_dependencies.py docker/build_dependencies.py
 RUN touch ./README.md
-RUN python3 -m pm.build_env --source /opt/hermes --python /usr/local/bin/python3 \
-    --out /opt/hermes/.venv --no-install-project --sealed \
-    --extra all --extra messaging --extra otlp --extra anthropic --extra bedrock \
-    --extra azure-identity --extra matrix --extra google-chat
+# One build-time selection owns both installed extras and PM's shipped baseline.
+RUN python3 -m docker.build_dependencies
 
 # Icons render on the runtime environment: Pillow and resvg-py are core
 # dependencies. A stage of its own so the frontend stage keeps building its

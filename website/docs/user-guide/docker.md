@@ -29,6 +29,16 @@ The image's Python environment follows `pyproject.toml` and `uv.lock` (currently
 Python 3.14). Its curated extras are not the native desktop bundle's
 `--all-extras` set. It does not include an Electron desktop app.
 
+`docker/build_dependencies.py` owns the image's extra selection. After a
+successful build it records every extra the image actually installed (including
+members of `all` and `messaging`, such as MCP and Slack) in
+`/opt/hermes/enabled-features.json`. On a new data volume, the first plugin
+dependency transaction keeps that set when it creates the writable generation
+under `/opt/data/installs`; once the volume has a recorded selection, PM keeps it.
+With `security.allow_lazy_installs: false` the same list is the frozen feature
+set. This is build-time metadata, not a startup install or a migration of
+existing volumes.
+
 ## Quick start
 
 If this is your first time running Hermes Agent, create a data directory on the host and start the container interactively to run the setup wizard:
